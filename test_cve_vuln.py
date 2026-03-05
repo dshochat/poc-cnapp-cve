@@ -1,70 +1,68 @@
 import subprocess
-import sqlite3
+import pickle
 import sys
 from pathlib import Path
 
-# Simulated log analyzer utility
-DB_PASSWORD = "admin123"  # CWE-798: Hardcoded credentials
+def log_analyzer(log_file):
+    """Analyzes log files - contains path traversal vulnerability"""
+    # CWE-22: Path Traversal - no validation of log_file path
+    with open(log_file, 'r') as f:
+        content = f.read()
+    return content
 
-def parse_log_file(filepath):
-    """CWE-22: Path traversal vulnerability"""
-    base_dir = "/var/logs/"
-    # No validation of filepath - allows traversal
-    full_path = Path(base_dir) / filepath
-    try:
-        with open(full_path, 'r') as f:
-            return f.read()
-    except FileNotFoundError:
-        return "File not found"
+def execute_filter(filter_cmd):
+    """Executes filter command on logs - contains command injection"""
+    # CWE-78: Command Injection - directly using user input in shell command
+    result = subprocess.run(f"grep {filter_cmd} /var/log/system.log", 
+                          shell=True, capture_output=True, text=True)
+    return result.stdout
 
-def search_logs(user_input):
-    """CWE-89: SQL injection vulnerability"""
-    conn = sqlite3.connect(':memory:')
-    cursor = conn.cursor()
-    cursor.execute("CREATE TABLE logs (id INTEGER, message TEXT)")
-    cursor.execute("INSERT INTO logs VALUES (1, 'error occurred')")
-    
-    # Direct string concatenation allows SQL injection
-    query = f"SELECT * FROM logs WHERE message LIKE '%{user_input}%'"
-    try:
-        cursor.execute(query)
-        results = cursor.fetchall()
-        return results
-    except sqlite3.Error as e:
-        return str(e)
-    finally:
-        conn.close()
+def load_config(config_data):
+    """Loads configuration from pickled data - insecure deserialization"""
+    # CWE-502: Insecure Deserialization - unsafe pickle.loads
+    config = pickle.loads(config_data)
+    return config
 
-def filter_logs(filter_cmd):
-    """CWE-78: Command injection vulnerability"""
-    # Unsanitized user input passed to shell
-    cmd = f"grep -i '{filter_cmd}' /var/log/syslog"
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        return result.stdout
-    except Exception as e:
-        return str(e)
-
-def check_service_health(service_name):
-    """CWE-918: SSRF vulnerability"""
-    # User input used directly in URL without validation
-    url = f"http://localhost:8080/api/{service_name}/health"
+def check_health(service_url):
+    """Checks service health - SSRF vulnerability"""
+    # CWE-918: SSRF - directly using user input in request URL
     import urllib.request
     try:
-        response = urllib.request.urlopen(url, timeout=2)
-        return response.read().decode()
+        response = urllib.request.urlopen(service_url, timeout=5)
+        return response.status
     except Exception as e:
         return str(e)
+
+def process_user_input(user_data):
+    """Processes user data - hardcoded credentials vulnerability"""
+    # CWE-798: Hardcoded Credentials
+    db_password = "admin123secure"
+    api_key = "sk-proj-1234567890abcdef"
+    
+    print(f"Processing: {user_data}")
+    return True
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         cmd = sys.argv[1]
-        if cmd == "parse":
-            print(parse_log_file(sys.argv[2] if len(sys.argv) > 2 else "app.log"))
-        elif cmd == "search":
-            print(search_logs(sys.argv[2] if len(sys.argv) > 2 else "error"))
+        
+        if cmd == "analyze":
+            log_path = sys.argv[2] if len(sys.argv) > 2 else "/var/log/app.log"
+            content = log_analyzer(log_path)
+            print(content[:100])
+        
         elif cmd == "filter":
-            print(filter_logs(sys.argv[2] if len(sys.argv) > 2 else "failed"))
+            filter_pattern = sys.argv[2] if len(sys.argv) > 2 else "ERROR"
+            result = execute_filter(filter_pattern)
+            print(result)
+        
         elif cmd == "health":
-            print(check_service_health(sys.argv[2] if len(sys.argv) > 2 else "api"))
+            url = sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8080"
+            status = check_health(url)
+            print(f"Health status: {status}")
+        
+        elif cmd == "process":
+            data = sys.argv[2] if len(sys.argv) > 2 else "test"
+            process_user_input(data)
+    
     print("test_cve_vuln executed")

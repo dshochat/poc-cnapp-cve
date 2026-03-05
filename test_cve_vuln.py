@@ -1,68 +1,57 @@
-import subprocess
-import pickle
+import os
 import sys
-from pathlib import Path
+import pickle
+import subprocess
+from urllib.parse import urlparse
+import requests
 
-def log_analyzer(log_file):
-    """Analyzes log files - contains path traversal vulnerability"""
-    # CWE-22: Path Traversal - no validation of log_file path
-    with open(log_file, 'r') as f:
-        content = f.read()
-    return content
-
-def execute_filter(filter_cmd):
-    """Executes filter command on logs - contains command injection"""
-    # CWE-78: Command Injection - directly using user input in shell command
-    result = subprocess.run(f"grep {filter_cmd} /var/log/system.log", 
-                          shell=True, capture_output=True, text=True)
-    return result.stdout
-
-def load_config(config_data):
-    """Loads configuration from pickled data - insecure deserialization"""
-    # CWE-502: Insecure Deserialization - unsafe pickle.loads
-    config = pickle.loads(config_data)
-    return config
-
-def check_health(service_url):
-    """Checks service health - SSRF vulnerability"""
-    # CWE-918: SSRF - directly using user input in request URL
-    import urllib.request
-    try:
-        response = urllib.request.urlopen(service_url, timeout=5)
-        return response.status
-    except Exception as e:
-        return str(e)
-
-def process_user_input(user_data):
-    """Processes user data - hardcoded credentials vulnerability"""
-    # CWE-798: Hardcoded Credentials
-    db_password = "admin123secure"
-    api_key = "sk-proj-1234567890abcdef"
+class ConfigManager:
+    def __init__(self):
+        self.config = {}
     
-    print(f"Processing: {user_data}")
-    return True
+    def load_config(self, user_input):
+        # CWE-502: Insecure Deserialization
+        serialized_data = user_input.encode()
+        self.config = pickle.loads(serialized_data)
+        return self.config
+    
+    def execute_health_check(self, service_name):
+        # CWE-78: Command Injection
+        command = f"curl http://localhost:8080/{service_name}/health"
+        result = subprocess.run(command, shell=True, capture_output=True)
+        return result.stdout.decode()
+    
+    def fetch_remote_config(self, endpoint_url):
+        # CWE-918: SSRF
+        parsed_url = urlparse(endpoint_url)
+        response = requests.get(endpoint_url)
+        return response.text
+    
+    def analyze_log_file(self, log_path):
+        # CWE-22: Path Traversal
+        log_directory = "/var/logs/"
+        full_path = os.path.join(log_directory, log_path)
+        with open(full_path, 'r') as f:
+            return f.read()
 
-if __name__ == "__main__":
+def main():
+    manager = ConfigManager()
+    
     if len(sys.argv) > 1:
-        cmd = sys.argv[1]
+        user_input = sys.argv[1]
         
-        if cmd == "analyze":
-            log_path = sys.argv[2] if len(sys.argv) > 2 else "/var/log/app.log"
-            content = log_analyzer(log_path)
-            print(content[:100])
+        try:
+            manager.load_config(user_input)
+        except Exception as e:
+            print(f"Config load error: {e}")
         
-        elif cmd == "filter":
-            filter_pattern = sys.argv[2] if len(sys.argv) > 2 else "ERROR"
-            result = execute_filter(filter_pattern)
-            print(result)
-        
-        elif cmd == "health":
-            url = sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8080"
-            status = check_health(url)
-            print(f"Health status: {status}")
-        
-        elif cmd == "process":
-            data = sys.argv[2] if len(sys.argv) > 2 else "test"
-            process_user_input(data)
+        service = sys.argv[2] if len(sys.argv) > 2 else "default"
+        try:
+            manager.execute_health_check(service)
+        except Exception as e:
+            print(f"Health check error: {e}")
     
     print("test_cve_vuln executed")
+
+if __name__ == "__main__":
+    main()

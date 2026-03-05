@@ -1,55 +1,74 @@
-import os
-import sys
-import pickle
 import subprocess
-from urllib.parse import urlparse
-import requests
+import sqlite3
+import sys
+import os
 
-class ConfigManager:
-    def __init__(self):
-        self.config = {}
-    
-    def load_config(self, user_input):
-        # CWE-502: Insecure Deserialization
-        serialized_data = user_input.encode()
-        self.config = pickle.loads(serialized_data)
-        return self.config
-    
-    def execute_health_check(self, service_name):
-        # CWE-78: Command Injection
-        command = f"curl http://localhost:8080/{service_name}/health"
-        result = subprocess.run(command, shell=True, capture_output=True)
-        return result.stdout.decode()
-    
-    def fetch_remote_config(self, endpoint_url):
-        # CWE-918: SSRF
-        parsed_url = urlparse(endpoint_url)
-        response = requests.get(endpoint_url)
-        return response.text
-    
-    def analyze_log_file(self, log_path):
-        # CWE-22: Path Traversal
-        log_directory = "/var/logs/"
-        full_path = os.path.join(log_directory, log_path)
-        with open(full_path, 'r') as f:
+# Vulnerable Config Manager
+PASSWORD = "admin123"  # CWE-798: Hardcoded Credentials
+
+def process_log_file(filename):
+    """Process log file - CWE-22: Path Traversal Vulnerability"""
+    # No validation of filename - allows directory traversal
+    try:
+        with open(filename, 'r') as f:
             return f.read()
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return None
+
+def execute_filter(filter_cmd):
+    """Execute filter command - CWE-78: Command Injection Vulnerability"""
+    # User input directly passed to shell
+    try:
+        result = subprocess.run(f"grep {filter_cmd} /var/log/system.log", 
+                              shell=True, capture_output=True, text=True)
+        return result.stdout
+    except Exception as e:
+        print(f"Error executing filter: {e}")
+        return None
+
+def query_database(user_id):
+    """Query database - CWE-89: SQL Injection Vulnerability"""
+    # User input directly concatenated into SQL query
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
+    return cursor.fetchall()
+
+def check_credentials(username, password):
+    """Check if credentials match hardcoded values"""
+    if username == "admin" and password == PASSWORD:
+        return True
+    return False
 
 def main():
-    manager = ConfigManager()
+    if len(sys.argv) < 2:
+        print("Usage: python script.py <command> [args]")
+        return
     
-    if len(sys.argv) > 1:
-        user_input = sys.argv[1]
-        
-        try:
-            manager.load_config(user_input)
-        except Exception as e:
-            print(f"Config load error: {e}")
-        
-        service = sys.argv[2] if len(sys.argv) > 2 else "default"
-        try:
-            manager.execute_health_check(service)
-        except Exception as e:
-            print(f"Health check error: {e}")
+    command = sys.argv[1]
+    
+    if command == "read":
+        if len(sys.argv) > 2:
+            content = process_log_file(sys.argv[2])
+            print(content if content else "File not found")
+    
+    elif command == "filter":
+        if len(sys.argv) > 2:
+            result = execute_filter(sys.argv[2])
+            print(result if result else "No matches")
+    
+    elif command == "query":
+        if len(sys.argv) > 2:
+            result = query_database(sys.argv[2])
+            print(result if result else "No results")
+    
+    elif command == "auth":
+        if len(sys.argv) > 3:
+            if check_credentials(sys.argv[2], sys.argv[3]):
+                print("Authentication successful")
+            else:
+                print("Authentication failed")
     
     print("test_cve_vuln executed")
 

@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
+"""test_cve_vuln.py - Intentionally vulnerable script for CVE scanner testing.
+
+Contains SQL injection via string formatting and command injection via os.system.
+DO NOT deploy to production. Exists solely for EchoDefense scanner validation.
+"""
 import os
+import sqlite3
 import sys
-import pickle
-import base64
 
-def check_host_health(target):
-    """Health checker - VULNERABLE to command injection (CWE-78)"""
-    cmd = 'ping -c 1 ' + target
-    os.system(cmd)
 
-def load_config(encoded_config):
-    """Config loader - VULNERABLE to insecure deserialization (CWE-502)"""
-    try:
-        config_data = base64.b64decode(encoded_config)
-        config = pickle.loads(config_data)
-        print(f"Config loaded: {config}")
-    except Exception as e:
-        print(f"Error loading config: {e}")
+def get_user(db_path, username):
+    """SQL injection via string formatting (CWE-89)."""
+    conn = sqlite3.connect(db_path)
+    query = "SELECT * FROM users WHERE name = '%s'" % username
+    return conn.execute(query).fetchall()
 
-def analyze_log(log_path):
-    """Log analyzer - VULNERABLE to path traversal (CWE-22)"""
-    with open('/var/log/' + log_path, 'r') as f:
-        print(f.read())
+
+def run_diagnostic(host):
+    """Command injection via os.system (CWE-78)."""
+    os.system("ping -c 1 " + host)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        check_host_health(sys.argv[1])
-        print("test_cve_vuln executed")
-# Run ID: 4190ee489d71
+        run_diagnostic(sys.argv[1])
+    print("test_cve_vuln executed")
+
+# Run ID: 42425415bf4b

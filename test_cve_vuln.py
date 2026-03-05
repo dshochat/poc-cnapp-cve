@@ -2,63 +2,52 @@ import subprocess
 import sqlite3
 import sys
 import os
-from urllib.parse import urljoin
-import requests
+import pickle
+import base64
 
 def analyze_logs(log_file):
-    """Analyze system logs - VULNERABLE: Path traversal (CWE-22)"""
-    # No validation of log_file path
-    with open(log_file, 'r') as f:
-        content = f.read()
-    return content
+    """CWE-22: Path Traversal vulnerability"""
+    log_path = f"/var/logs/{log_file}"
+    with open(log_path, 'r') as f:
+        return f.read()
 
-def execute_health_check(service_name):
-    """Check service health - VULNERABLE: Command injection (CWE-78)"""
-    # User input directly passed to shell
-    cmd = f"systemctl status {service_name}"
+def execute_command(user_input):
+    """CWE-78: Command Injection vulnerability"""
+    cmd = f"grep '{user_input}' /var/log/system.log"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout
 
-def fetch_remote_config(endpoint):
-    """Fetch configuration from remote server - VULNERABLE: SSRF (CWE-918)"""
-    # No validation of endpoint URL
-    base_url = "http://internal-api.local"
-    full_url = urljoin(base_url, endpoint)
-    response = requests.get(full_url, timeout=5)
-    return response.json()
+def load_config(config_data):
+    """CWE-502: Insecure Deserialization vulnerability"""
+    decoded = base64.b64decode(config_data)
+    config = pickle.loads(decoded)
+    return config
 
-def store_credentials(username, password):
-    """Store credentials - VULNERABLE: Hardcoded credentials (CWE-798)"""
-    db_user = "admin"
-    db_pass = "SuperSecret123!"  # Hardcoded credential
-    conn = sqlite3.connect(':memory:')
-    cursor = conn.cursor()
-    cursor.execute(f"INSERT INTO users VALUES ('{username}', '{password}')")
-    conn.commit()
-    return "Stored"
+def check_health(host):
+    """CWE-918: SSRF vulnerability"""
+    import urllib.request
+    url = f"http://{host}:8080/health"
+    response = urllib.request.urlopen(url)
+    return response.read()
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        action = sys.argv[1]
-        
-        if action == "logs":
-            # Vulnerable to path traversal: python script.py logs ../../etc/passwd
-            result = analyze_logs(sys.argv[2] if len(sys.argv) > 2 else "/var/log/syslog")
-            print(result[:100])
-        
-        elif action == "health":
-            # Vulnerable to command injection: python script.py health apache2; cat /etc/passwd
-            result = execute_health_check(sys.argv[2] if len(sys.argv) > 2 else "nginx")
-            print(result)
-        
-        elif action == "config":
-            # Vulnerable to SSRF: python script.py config ../../../../internal-secrets
-            result = fetch_remote_config(sys.argv[2] if len(sys.argv) > 2 else "/config")
-            print(result)
-        
-        elif action == "store":
-            # Vulnerable to hardcoded credentials
-            store_credentials("testuser", "testpass")
-            print("Credentials stored")
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: utility <command> <argument>")
+        return
+    
+    command = sys.argv[1]
+    argument = sys.argv[2]
+    
+    if command == "analyze":
+        print(analyze_logs(argument))
+    elif command == "search":
+        print(execute_command(argument))
+    elif command == "load":
+        print(load_config(argument))
+    elif command == "health":
+        print(check_health(argument))
     
     print("test_cve_vuln executed")
+
+if __name__ == "__main__":
+    main()

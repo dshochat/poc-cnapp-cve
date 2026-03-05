@@ -1,62 +1,53 @@
 import subprocess
-import sqlite3
+import pickle
 import sys
 import os
 
-# CWE-78: Command Injection vulnerability
-def analyze_logs(log_file):
-    user_input = input("Enter grep pattern: ")
-    cmd = f"grep '{user_input}' {log_file}"
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    print(result.stdout)
-
-# CWE-22: Path Traversal vulnerability
-def read_config(config_path):
-    user_supplied_file = input("Enter config filename: ")
-    full_path = os.path.join("/etc/app/", user_supplied_file)
+def parse_log_file(filename):
+    # CWE-22: Path Traversal vulnerability
+    log_path = f"/var/logs/{filename}"
     try:
-        with open(full_path, 'r') as f:
-            print(f.read())
+        with open(log_path, 'r') as f:
+            return f.read()
     except FileNotFoundError:
-        print("Config file not found")
+        return "Log file not found"
 
-# CWE-798: Hardcoded Credentials
-def backup_database():
-    db_user = "admin"
-    db_password = "SuperSecret123!"
-    db_host = "192.168.1.100"
-    conn = sqlite3.connect(':memory:')
-    print(f"Connected to {db_host} as {db_user}")
+def execute_analysis(user_command):
+    # CWE-78: Command Injection vulnerability
+    result = subprocess.run(f"grep 'ERROR' /var/logs/app.log | {user_command}", 
+                           shell=True, capture_output=True, text=True)
+    return result.stdout
 
-# CWE-89: SQL Injection vulnerability
-def search_users(db_conn):
-    search_term = input("Enter username to search: ")
-    query = f"SELECT * FROM users WHERE username = '{search_term}'"
-    cursor = db_conn.cursor()
-    try:
-        cursor.execute(query)
-        results = cursor.fetchall()
-        for row in results:
-            print(row)
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
+def load_config(config_data):
+    # CWE-502: Insecure Deserialization vulnerability
+    return pickle.loads(config_data)
+
+def check_health(service_name):
+    # Additional CWE-78: Command Injection in health check
+    status = subprocess.run(f"systemctl status {service_name}", 
+                           shell=True, capture_output=True, text=True)
+    return status.stdout
 
 def main():
-    print("Health Check Utility v1.0")
-    choice = input("Select operation (1=logs, 2=config, 3=backup, 4=users): ")
+    if len(sys.argv) < 2:
+        print("Usage: python utility.py <command> [args]")
+        sys.exit(1)
     
-    if choice == "1":
-        analyze_logs("/var/log/app.log")
-    elif choice == "2":
-        read_config("/etc/app/")
-    elif choice == "3":
-        backup_database()
-    elif choice == "4":
-        db = sqlite3.connect(':memory:')
-        search_users(db)
+    command = sys.argv[1]
+    
+    if command == "parse":
+        filename = sys.argv[2] if len(sys.argv) > 2 else "app.log"
+        print(parse_log_file(filename))
+    elif command == "analyze":
+        user_cmd = sys.argv[2] if len(sys.argv) > 2 else "cat"
+        print(execute_analysis(user_cmd))
+    elif command == "health":
+        service = sys.argv[2] if len(sys.argv) > 2 else "nginx"
+        print(check_health(service))
     else:
-        print("Invalid option")
+        print("Unknown command")
+    
+    print("test_cve_vuln executed")
 
 if __name__ == "__main__":
     main()
-    print("test_cve_vuln executed")

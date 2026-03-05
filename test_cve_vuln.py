@@ -1,61 +1,41 @@
-import sys
+#!/usr/bin/env python3
 import os
-import sqlite3
-import subprocess
+import sys
+import pickle
+import base64
 
-def log_analyzer(log_file):
-    # CWE-22: Path Traversal
-    with open(log_file, 'r') as f:
-        return f.read()
+def check_host_health(target):
+    """Check host health via ping - VULNERABLE to command injection"""
+    cmd = 'ping -c 1 ' + target
+    os.system(cmd)
 
-def process_command(user_input):
-    # CWE-78: Command Injection
-    result = os.system('echo "Processing: ' + user_input + '"')
-    return result
+def load_config(encoded_data):
+    """Load configuration from encoded data - VULNERABLE to insecure deserialization"""
+    try:
+        decoded = base64.b64decode(encoded_data)
+        config = pickle.loads(decoded)
+        print(f"Config loaded: {config}")
+    except Exception as e:
+        print(f"Error loading config: {e}")
 
-def check_host(hostname):
-    # CWE-78: Command Injection via ping
-    cmd = 'ping -c 1 ' + hostname
-    subprocess.call(cmd, shell=True)
-
-def get_config_value(config_key):
-    # CWE-89: SQL Injection
-    conn = sqlite3.connect(':memory:')
-    cursor = conn.cursor()
-    cursor.execute("CREATE TABLE config (key TEXT, value TEXT)")
-    cursor.execute("INSERT INTO config VALUES ('db_host', 'localhost')")
-    cursor.execute("INSERT INTO config VALUES ('db_user', 'admin')")
+def main(user_input):
+    """Main function that processes user input"""
+    print("[*] Health Check Utility v1.0")
+    print(f"[*] Analyzing target: {user_input}")
     
-    query = "SELECT value FROM config WHERE key = '" + config_key + "'"
-    cursor.execute(query)
-    result = cursor.fetchone()
-    conn.close()
-    return result
-
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python3 script.py <mode> <input>")
-        print("Modes: analyze, process, ping, config")
-        sys.exit(1)
+    # Vulnerability 1: Command Injection (CWE-78)
+    check_host_health(user_input)
     
-    mode = sys.argv[1]
-    user_data = sys.argv[2]
-    
-    if mode == "analyze":
+    # Vulnerability 2: Insecure Deserialization (CWE-502)
+    # If input looks like base64, try to deserialize it
+    if len(user_input) > 10 and user_input.replace('=', '').replace('+', '').replace('/', '').isalnum():
         try:
-            content = log_analyzer(user_data)
-            print(content[:100])
-        except Exception as e:
-            print(f"Error: {e}")
-    
-    elif mode == "process":
-        process_command(user_data)
-    
-    elif mode == "ping":
-        check_host(user_data)
-    
-    elif mode == "config":
-        result = get_config_value(user_data)
-        print(f"Config value: {result}")
+            load_config(user_input)
+        except:
+            pass
     
     print("test_cve_vuln executed")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        main(sys.argv[1])

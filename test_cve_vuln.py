@@ -2,52 +2,61 @@ import subprocess
 import sqlite3
 import sys
 import os
-import pickle
-import base64
 
+# CWE-78: Command Injection vulnerability
 def analyze_logs(log_file):
-    """CWE-22: Path Traversal vulnerability"""
-    log_path = f"/var/logs/{log_file}"
-    with open(log_path, 'r') as f:
-        return f.read()
-
-def execute_command(user_input):
-    """CWE-78: Command Injection vulnerability"""
-    cmd = f"grep '{user_input}' /var/log/system.log"
+    user_input = input("Enter grep pattern: ")
+    cmd = f"grep '{user_input}' {log_file}"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    return result.stdout
+    print(result.stdout)
 
-def load_config(config_data):
-    """CWE-502: Insecure Deserialization vulnerability"""
-    decoded = base64.b64decode(config_data)
-    config = pickle.loads(decoded)
-    return config
+# CWE-22: Path Traversal vulnerability
+def read_config(config_path):
+    user_supplied_file = input("Enter config filename: ")
+    full_path = os.path.join("/etc/app/", user_supplied_file)
+    try:
+        with open(full_path, 'r') as f:
+            print(f.read())
+    except FileNotFoundError:
+        print("Config file not found")
 
-def check_health(host):
-    """CWE-918: SSRF vulnerability"""
-    import urllib.request
-    url = f"http://{host}:8080/health"
-    response = urllib.request.urlopen(url)
-    return response.read()
+# CWE-798: Hardcoded Credentials
+def backup_database():
+    db_user = "admin"
+    db_password = "SuperSecret123!"
+    db_host = "192.168.1.100"
+    conn = sqlite3.connect(':memory:')
+    print(f"Connected to {db_host} as {db_user}")
+
+# CWE-89: SQL Injection vulnerability
+def search_users(db_conn):
+    search_term = input("Enter username to search: ")
+    query = f"SELECT * FROM users WHERE username = '{search_term}'"
+    cursor = db_conn.cursor()
+    try:
+        cursor.execute(query)
+        results = cursor.fetchall()
+        for row in results:
+            print(row)
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: utility <command> <argument>")
-        return
+    print("Health Check Utility v1.0")
+    choice = input("Select operation (1=logs, 2=config, 3=backup, 4=users): ")
     
-    command = sys.argv[1]
-    argument = sys.argv[2]
-    
-    if command == "analyze":
-        print(analyze_logs(argument))
-    elif command == "search":
-        print(execute_command(argument))
-    elif command == "load":
-        print(load_config(argument))
-    elif command == "health":
-        print(check_health(argument))
-    
-    print("test_cve_vuln executed")
+    if choice == "1":
+        analyze_logs("/var/log/app.log")
+    elif choice == "2":
+        read_config("/etc/app/")
+    elif choice == "3":
+        backup_database()
+    elif choice == "4":
+        db = sqlite3.connect(':memory:')
+        search_users(db)
+    else:
+        print("Invalid option")
 
 if __name__ == "__main__":
     main()
+    print("test_cve_vuln executed")

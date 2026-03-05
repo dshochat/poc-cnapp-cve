@@ -1,52 +1,46 @@
 import subprocess
-import os
-import sqlite3
+import pickle
 import sys
+import os
 
-def analyze_logs(log_file):
-    """Vulnerable log analyzer with path traversal and command injection"""
-    # CWE-22: Path Traversal - no validation of log_file path
-    with open(log_file, 'r') as f:
-        content = f.read()
+def parse_log_file(filepath):
+    # CWE-22: Path Traversal - no validation of filepath
+    with open(filepath, 'r') as f:
+        return f.read()
+
+def execute_filter(user_filter):
+    # CWE-78: Command Injection - unsanitized user input in shell command
+    command = f"grep '{user_filter}' /var/log/syslog"
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return result.stdout
+
+def load_config(config_data):
+    # CWE-502: Insecure Deserialization - unpickling untrusted data
+    return pickle.loads(config_data)
+
+def check_system_health(config_bytes):
+    print("System Health Checker v1.0")
     
-    # CWE-78: Command Injection - unsanitized grep command
-    search_term = input("Enter search term: ")
-    cmd = f"grep '{search_term}' {log_file}"
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    print(result.stdout)
-
-def query_database(user_input):
-    """Vulnerable database query"""
-    # CWE-89: SQL Injection - direct string concatenation
-    conn = sqlite3.connect(':memory:')
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM users WHERE username = '{user_input}'")
-    return cursor.fetchall()
-
-def fetch_remote_config(url):
-    """Vulnerable remote fetcher"""
-    # CWE-918: SSRF - no URL validation
-    import urllib.request
+    # Parse command line arguments
+    if len(sys.argv) > 1:
+        log_path = sys.argv[1]
+        try:
+            logs = parse_log_file(log_path)
+            print(f"Loaded {len(logs)} bytes from log")
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    if len(sys.argv) > 2:
+        filter_term = sys.argv[2]
+        filtered = execute_filter(filter_term)
+        print(f"Filtered results:\n{filtered}")
+    
     try:
-        response = urllib.request.urlopen(url, timeout=5)
-        return response.read().decode()
+        config = load_config(config_bytes)
+        print(f"Config loaded: {config}")
     except Exception as e:
-        return f"Error: {e}"
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: utility.py [analyze|query|fetch]")
-        return
-    
-    action = sys.argv[1]
-    
-    if action == "analyze" and len(sys.argv) > 2:
-        analyze_logs(sys.argv[2])
-    elif action == "query" and len(sys.argv) > 2:
-        print(query_database(sys.argv[2]))
-    elif action == "fetch" and len(sys.argv) > 2:
-        print(fetch_remote_config(sys.argv[2]))
+        print(f"Config error: {e}")
 
 if __name__ == "__main__":
-    main()
+    check_system_health(b"")
     print("test_cve_vuln executed")

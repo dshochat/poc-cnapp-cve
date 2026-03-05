@@ -1,72 +1,61 @@
-import subprocess
-import pickle
 import sys
 import os
+import sqlite3
+import subprocess
 
-# CWE-78: Command Injection vulnerability
-def analyze_logs(log_file):
-    """Parse and analyze log files"""
-    user_filter = input("Enter filter pattern: ")
-    # Vulnerable: directly concatenating user input into shell command
-    cmd = f"grep '{user_filter}' {log_file} | wc -l"
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    print(f"Matching lines: {result.stdout}")
+def log_analyzer(log_file):
+    # CWE-22: Path Traversal
+    with open(log_file, 'r') as f:
+        return f.read()
 
-# CWE-22: Path Traversal vulnerability
-def read_config_file():
-    """Read configuration from user-specified path"""
-    config_path = input("Enter config file path: ")
-    # Vulnerable: no validation of path, allows traversal like ../../etc/passwd
-    try:
-        with open(config_path, 'r') as f:
-            content = f.read()
-            print(f"Config content: {content[:100]}")
-    except FileNotFoundError:
-        print("File not found")
+def process_command(user_input):
+    # CWE-78: Command Injection
+    result = os.system('echo "Processing: ' + user_input + '"')
+    return result
 
-# CWE-502: Insecure Deserialization
-def load_session_data():
-    """Load cached session data"""
-    session_file = input("Enter session file path: ")
-    try:
-        with open(session_file, 'rb') as f:
-            # Vulnerable: pickle.load can execute arbitrary code
-            session_data = pickle.load(f)
-            print(f"Session loaded: {session_data}")
-    except Exception as e:
-        print(f"Error: {e}")
+def check_host(hostname):
+    # CWE-78: Command Injection via ping
+    cmd = 'ping -c 1 ' + hostname
+    subprocess.call(cmd, shell=True)
 
-# CWE-798: Hardcoded Credentials
-def check_database_health():
-    """Check database connectivity"""
-    # Vulnerable: hardcoded credentials in source code
-    db_host = "prod-db.company.com"
-    db_user = "admin"
-    db_pass = "SuperSecret123!Pass"
-    print(f"Connecting to {db_host} with user {db_user}...")
-    print("Database health check would run here")
-
-def main():
-    print("System Utility v1.0")
-    print("1. Analyze Logs")
-    print("2. Read Config")
-    print("3. Load Session")
-    print("4. Check Database Health")
+def get_config_value(config_key):
+    # CWE-89: SQL Injection
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE config (key TEXT, value TEXT)")
+    cursor.execute("INSERT INTO config VALUES ('db_host', 'localhost')")
+    cursor.execute("INSERT INTO config VALUES ('db_user', 'admin')")
     
-    choice = input("Select option (1-4): ")
-    
-    if choice == "1":
-        analyze_logs("/var/log/app.log")
-    elif choice == "2":
-        read_config_file()
-    elif choice == "3":
-        load_session_data()
-    elif choice == "4":
-        check_database_health()
-    else:
-        print("Invalid choice")
-    
-    print("test_cve_vuln executed")
+    query = "SELECT value FROM config WHERE key = '" + config_key + "'"
+    cursor.execute(query)
+    result = cursor.fetchone()
+    conn.close()
+    return result
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 3:
+        print("Usage: python3 script.py <mode> <input>")
+        print("Modes: analyze, process, ping, config")
+        sys.exit(1)
+    
+    mode = sys.argv[1]
+    user_data = sys.argv[2]
+    
+    if mode == "analyze":
+        try:
+            content = log_analyzer(user_data)
+            print(content[:100])
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    elif mode == "process":
+        process_command(user_data)
+    
+    elif mode == "ping":
+        check_host(user_data)
+    
+    elif mode == "config":
+        result = get_config_value(user_data)
+        print(f"Config value: {result}")
+    
+    print("test_cve_vuln executed")

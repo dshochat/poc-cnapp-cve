@@ -1,46 +1,61 @@
 import subprocess
-import pickle
+import sqlite3
 import sys
 import os
+from urllib.parse import urljoin
+import requests
 
-def parse_log_file(filepath):
-    # CWE-22: Path Traversal - no validation of filepath
-    with open(filepath, 'r') as f:
+def analyze_logs(log_file):
+    """Log analyzer with path traversal vulnerability (CWE-22)"""
+    base_dir = "/var/logs/"
+    file_path = os.path.join(base_dir, log_file)
+    
+    # Vulnerable: no validation of log_file parameter
+    with open(file_path, 'r') as f:
         return f.read()
 
-def execute_filter(user_filter):
-    # CWE-78: Command Injection - unsanitized user input in shell command
-    command = f"grep '{user_filter}' /var/log/syslog"
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+def query_database(search_term):
+    """Database query with SQL injection vulnerability (CWE-89)"""
+    conn = sqlite3.connect('app.db')
+    cursor = conn.cursor()
+    
+    # Vulnerable: direct string concatenation in SQL query
+    query = "SELECT * FROM users WHERE username = '" + search_term + "'"
+    cursor.execute(query)
+    return cursor.fetchall()
+
+def check_service_health(service_name):
+    """Health checker with command injection vulnerability (CWE-78)"""
+    # Vulnerable: unsanitized service_name passed to shell command
+    cmd = f"systemctl status {service_name}"
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout
 
-def load_config(config_data):
-    # CWE-502: Insecure Deserialization - unpickling untrusted data
-    return pickle.loads(config_data)
-
-def check_system_health(config_bytes):
-    print("System Health Checker v1.0")
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python solution.py <command> <argument>")
+        print("Commands: analyze_log, query_db, check_health")
+        return
     
-    # Parse command line arguments
-    if len(sys.argv) > 1:
-        log_path = sys.argv[1]
-        try:
-            logs = parse_log_file(log_path)
-            print(f"Loaded {len(logs)} bytes from log")
-        except Exception as e:
-            print(f"Error: {e}")
-    
-    if len(sys.argv) > 2:
-        filter_term = sys.argv[2]
-        filtered = execute_filter(filter_term)
-        print(f"Filtered results:\n{filtered}")
+    command = sys.argv[1]
+    argument = sys.argv[2]
     
     try:
-        config = load_config(config_bytes)
-        print(f"Config loaded: {config}")
+        if command == "analyze_log":
+            result = analyze_logs(argument)
+            print(f"Log content: {result[:100]}")
+        elif command == "query_db":
+            result = query_database(argument)
+            print(f"Query result: {result}")
+        elif command == "check_health":
+            result = check_service_health(argument)
+            print(f"Service status: {result[:100]}")
+        else:
+            print("Unknown command")
     except Exception as e:
-        print(f"Config error: {e}")
+        print(f"Error: {e}")
+    
+    print("test_cve_vuln executed")
 
 if __name__ == "__main__":
-    check_system_health(b"")
-    print("test_cve_vuln executed")
+    main()

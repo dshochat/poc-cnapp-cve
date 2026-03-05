@@ -1,34 +1,27 @@
 #!/usr/bin/env python3
+"""test_cve_vuln.py - Intentionally vulnerable script for CVE scanner testing.
+
+Contains SQL injection via string formatting and command injection via os.system.
+DO NOT deploy to production. Exists solely for EchoDefense scanner validation.
+"""
 import os
+import sqlite3
 import sys
-import pickle
-import base64
 
-def check_server_health(target):
-    """Check server health via ping - VULNERABLE to command injection (CWE-78)"""
-    cmd = 'ping -c 1 ' + target
-    os.system(cmd)
 
-def load_config(encoded_config):
-    """Load configuration from base64 - VULNERABLE to insecure deserialization (CWE-502)"""
-    try:
-        decoded = base64.b64decode(encoded_config)
-        config = pickle.loads(decoded)
-        print(f"Config loaded: {config}")
-    except Exception as e:
-        print(f"Error loading config: {e}")
+def get_user(db_path, username):
+    """SQL injection via string formatting (CWE-89)."""
+    conn = sqlite3.connect(db_path)
+    query = "SELECT * FROM users WHERE name = '%s'" % username
+    return conn.execute(query).fetchall()
 
-def main():
-    if len(sys.argv) > 1:
-        target = sys.argv[1]
-        
-        # First call: command injection vulnerability
-        check_server_health(target)
-        
-        # Second call: insecure deserialization vulnerability
-        load_config(target)
-        
-        print("test_cve_vuln executed")
+
+def run_diagnostic(host):
+    """Command injection via os.system (CWE-78)."""
+    os.system("ping -c 1 " + host)
+
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1:
+        run_diagnostic(sys.argv[1])
+    print("test_cve_vuln executed")

@@ -1,55 +1,52 @@
-import sqlite3
 import subprocess
-import sys
 import os
+import sqlite3
+import sys
 
-def log_analyzer(log_file):
-    """Analyze system logs with user input - vulnerable to path traversal"""
+def analyze_logs(log_file):
+    """Vulnerable log analyzer with path traversal and command injection"""
     # CWE-22: Path Traversal - no validation of log_file path
     with open(log_file, 'r') as f:
         content = f.read()
-    return content
-
-def search_logs(search_term):
-    """Search logs using command line tool - vulnerable to command injection"""
-    # CWE-78: Command Injection - user input directly in shell command
-    cmd = f"grep '{search_term}' /var/log/syslog"
+    
+    # CWE-78: Command Injection - unsanitized grep command
+    search_term = input("Enter search term: ")
+    cmd = f"grep '{search_term}' {log_file}"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    return result.stdout
+    print(result.stdout)
 
-def fetch_user_config(user_id):
-    """Fetch user configuration from database - vulnerable to SQL injection"""
-    # CWE-89: SQL Injection - user input concatenated into query
+def query_database(user_input):
+    """Vulnerable database query"""
+    # CWE-89: SQL Injection - direct string concatenation
     conn = sqlite3.connect(':memory:')
     cursor = conn.cursor()
-    query = f"SELECT * FROM users WHERE id = {user_id}"
-    cursor.execute(query)
+    cursor.execute(f"SELECT * FROM users WHERE username = '{user_input}'")
     return cursor.fetchall()
 
+def fetch_remote_config(url):
+    """Vulnerable remote fetcher"""
+    # CWE-918: SSRF - no URL validation
+    import urllib.request
+    try:
+        response = urllib.request.urlopen(url, timeout=5)
+        return response.read().decode()
+    except Exception as e:
+        return f"Error: {e}"
+
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python script.py <action> <input>")
-        sys.exit(1)
+    if len(sys.argv) < 2:
+        print("Usage: utility.py [analyze|query|fetch]")
+        return
     
     action = sys.argv[1]
-    user_input = sys.argv[2]
     
-    if action == "analyze":
-        try:
-            result = log_analyzer(user_input)
-            print(f"Log content: {result[:100]}")
-        except FileNotFoundError:
-            print("Log file not found")
-    
-    elif action == "search":
-        result = search_logs(user_input)
-        print(f"Search results: {result}")
-    
-    elif action == "config":
-        result = fetch_user_config(user_input)
-        print(f"Config: {result}")
-    
-    print("test_cve_vuln executed")
+    if action == "analyze" and len(sys.argv) > 2:
+        analyze_logs(sys.argv[2])
+    elif action == "query" and len(sys.argv) > 2:
+        print(query_database(sys.argv[2]))
+    elif action == "fetch" and len(sys.argv) > 2:
+        print(fetch_remote_config(sys.argv[2]))
 
 if __name__ == "__main__":
     main()
+    print("test_cve_vuln executed")

@@ -1,65 +1,57 @@
 import subprocess
-import pickle
+import sqlite3
 import sys
-import os
+from pathlib import Path
 
-# CWE-78: Command Injection
 def analyze_logs(log_file):
-    """Analyzes log files for errors - VULNERABLE to command injection"""
-    user_filter = input("Enter log filter pattern: ")
-    # Dangerous: user input directly in shell command
-    cmd = f"grep '{user_filter}' {log_file} | wc -l"
+    # CWE-22: Path Traversal vulnerability
+    base_dir = "/var/logs"
+    full_path = base_dir + "/" + log_file
+    try:
+        with open(full_path, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "Log file not found"
+
+def execute_grep(pattern, filename):
+    # CWE-78: Command Injection vulnerability
+    cmd = f"grep '{pattern}' {filename}"
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return result.stdout
 
-# CWE-502: Insecure Deserialization
-def load_cache(cache_file):
-    """Loads cached configuration data - VULNERABLE to insecure deserialization"""
-    try:
-        with open(cache_file, 'rb') as f:
-            # Dangerous: unpickling untrusted data
-            config = pickle.load(f)
-        return config
-    except Exception as e:
-        print(f"Error loading cache: {e}")
-        return None
-
-def save_cache(cache_file, data):
-    """Saves configuration to cache"""
-    with open(cache_file, 'wb') as f:
-        pickle.dump(data, f)
-
-# CWE-798: Hardcoded Credentials
-def authenticate_service():
-    """Authenticates to monitoring service"""
-    # Dangerous: hardcoded credentials
-    API_KEY = "sk_prod_4a8f3c2b9e1d7f6g5h2j"
-    DB_USER = "admin"
-    DB_PASS = "P@ssw0rd123Admin"
-    
-    print(f"Authenticating with API key: {API_KEY[:10]}...")
-    return {"user": DB_USER, "pass": DB_PASS}
+def check_config(db_path, config_key):
+    # CWE-89: SQL Injection vulnerability
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    query = f"SELECT value FROM config WHERE key = '{config_key}'"
+    cursor.execute(query)
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
 
 def main():
-    print("=== System Health Checker ===")
+    if len(sys.argv) < 2:
+        print("Usage: utility.py <command> [args]")
+        return
     
-    # Initialize authentication
-    creds = authenticate_service()
+    command = sys.argv[1]
     
-    # Load cached health data
-    cache_file = "health_cache.pkl"
-    health_data = load_cache(cache_file)
+    if command == "analyze":
+        if len(sys.argv) > 2:
+            log_file = sys.argv[2]
+            print(analyze_logs(log_file))
     
-    if not health_data:
-        health_data = {"status": "unknown", "last_check": None}
-        save_cache(cache_file, health_data)
+    elif command == "search":
+        if len(sys.argv) > 3:
+            pattern = sys.argv[2]
+            filename = sys.argv[3]
+            print(execute_grep(pattern, filename))
     
-    # Analyze system logs
-    try:
-        log_count = analyze_logs("/var/log/syslog")
-        print(f"Log entries found: {log_count}")
-    except Exception as e:
-        print(f"Log analysis failed: {e}")
+    elif command == "config":
+        if len(sys.argv) > 2:
+            key = sys.argv[2]
+            result = check_config("config.db", key)
+            print(f"Config value: {result}")
     
     print("test_cve_vuln executed")
 

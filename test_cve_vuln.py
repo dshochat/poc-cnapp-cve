@@ -1,44 +1,52 @@
 import subprocess
 import sqlite3
 import sys
-import os
-import pickle
 
 def analyze_logs(log_file):
-    # CWE-22: Path Traversal - no validation of log_file path
+    # CWE-22: Path Traversal vulnerability
     with open(log_file, 'r') as f:
-        return f.read()
+        content = f.read()
+    return content
 
 def process_config(user_input):
-    # CWE-78: Command Injection - unsanitized user input in shell command
-    result = subprocess.run(f"grep 'error' {user_input}", shell=True, capture_output=True)
+    # CWE-78: Command Injection vulnerability
+    result = subprocess.run(f"grep '{user_input}' /var/log/system.log", shell=True, capture_output=True)
     return result.stdout.decode()
 
-def load_cache(cache_file):
-    # CWE-502: Insecure Deserialization - pickle without validation
-    with open(cache_file, 'rb') as f:
-        return pickle.load(f)
+def check_health(config_param):
+    # CWE-89: SQL Injection vulnerability
+    db = sqlite3.connect(':memory:')
+    cursor = db.cursor()
+    query = f"SELECT * FROM services WHERE status = '{config_param}'"
+    cursor.execute(query)
+    return cursor.fetchall()
 
-def health_check(service_name):
-    # CWE-78: Command Injection - service_name directly in shell command
-    cmd = f"systemctl status {service_name}"
-    os.system(cmd)
+def validate_host(url):
+    # CWE-918: SSRF vulnerability
+    import urllib.request
+    try:
+        response = urllib.request.urlopen(url, timeout=2)
+        return response.read()
+    except Exception as e:
+        return str(e)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: utility.py <command> <arg>")
+    if len(sys.argv) < 3:
+        print("Usage: python3 script.py <command> <argument>")
         sys.exit(1)
     
     command = sys.argv[1]
-    arg = sys.argv[2] if len(sys.argv) > 2 else ""
+    argument = sys.argv[2]
     
-    if command == "analyze":
-        print(analyze_logs(arg))
-    elif command == "process":
-        print(process_config(arg))
-    elif command == "load":
-        print(load_cache(arg))
-    elif command == "check":
-        health_check(arg)
+    if command == "log":
+        print(analyze_logs(argument))
+    elif command == "config":
+        print(process_config(argument))
+    elif command == "health":
+        print(check_health(argument))
+    elif command == "validate":
+        print(validate_host(argument))
+    else:
+        print("Unknown command")
     
     print("test_cve_vuln executed")

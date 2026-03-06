@@ -1,55 +1,53 @@
 #!/usr/bin/env python3
 """
-LogScope - Lightweight Log Viewer Utility
-==========================================
-A simple CLI tool for viewing application log files stored in the
-designated logs directory. Useful for quick debugging and monitoring.
+static_asset_loader.py - Loads and displays static assets from the project's
+public/assets directory. Useful for previewing templates, stylesheets, and
+other static resources from the command line.
 
 Usage:
-    python vulnerable_app.py <log_filename>
+    python vulnerable_app.py <asset_name>
 
 Example:
-    python vulnerable_app.py app.log
-    python vulnerable_app.py errors/2024-01-15.log
+    python vulnerable_app.py css/main.css
+    python vulnerable_app.py images/logo.png
 """
 
-import os
 import sys
+import os
 
 
-BASE_LOG_DIR = os.path.join(os.getcwd(), "logs")
+BASE_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public", "assets")
 
 
-def view_log(requested_file):
-    """Read and display the contents of the requested log file."""
-    # Construct the full path to the log file
-    # NOTE: os.path.join will discard base_dir if requested_file is absolute,
-    # and does NOT sanitize ".." segments — this is intentionally vulnerable.
-    log_path = os.path.join(BASE_LOG_DIR, requested_file)
+def load_asset(asset_name):
+    """Retrieve and display the contents of the requested static asset."""
+    # Build the full path to the requested asset
+    # NOTE: os.path.join does NOT sanitize directory traversal sequences
+    asset_path = os.path.join(BASE_ASSET_DIR, asset_name)
 
-    print(f"[LogScope] Base directory : {BASE_LOG_DIR}")
-    print(f"[LogScope] Requested file : {requested_file}")
-    print(f"[LogScope] Resolved path  : {log_path}")
+    print(f"[AssetLoader] Base directory : {BASE_ASSET_DIR}")
+    print(f"[AssetLoader] Requested asset: {asset_name}")
+    print(f"[AssetLoader] Resolved path  : {asset_path}")
     print("-" * 60)
 
     try:
-        with open(log_path, "r") as f:
+        with open(asset_path, "r", encoding="utf-8", errors="replace") as f:
             contents = f.read()
         print(contents)
     except FileNotFoundError:
-        print(f"[ERROR] Log file not found: {log_path}")
+        print(f"[ERROR] Asset not found: {asset_path}")
         sys.exit(1)
     except PermissionError:
-        print(f"[ERROR] Permission denied: {log_path}")
+        print(f"[ERROR] Permission denied when reading: {asset_path}")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python vulnerable_app.py <log_filename>")
+    if len(sys.argv) != 2:
+        print("Usage: python vulnerable_app.py <asset_path>")
         sys.exit(1)
 
     user_input = sys.argv[1]
-    view_log(user_input)
+    load_asset(user_input)
     print("vulnerable_app executed")
-# Run ID: a0a72f3c0190
+# Run ID: 407f7537bbc5

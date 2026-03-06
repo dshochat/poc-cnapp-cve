@@ -1,54 +1,32 @@
 #!/usr/bin/env python3
+"""vulnerable_app.py — Intentionally vulnerable file server.
+
+Contains a Path Traversal vulnerability (CWE-22) via unsafe os.path.join.
+DO NOT deploy to production. Exists solely for EchoDefense enforcement testing.
 """
-LogScope - Lightweight Log Viewer Utility
-==========================================
-A simple CLI tool for viewing application log files stored in the
-designated logs directory. Useful for quick debugging and monitoring.
-
-Usage:
-    python vulnerable_app.py <log_filename>
-
-Example:
-    python vulnerable_app.py app.log
-    python vulnerable_app.py errors/2024-01-15.log
-"""
-
 import os
 import sys
 
 
-BASE_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+def read_file(base_dir, user_path):
+    """Read a file relative to base_dir — VULNERABLE to path traversal (CWE-22).
 
-
-def view_log(filename):
-    """Read and display the contents of the requested log file."""
-    # Construct the full path to the requested log file
-    log_path = os.path.join(BASE_LOG_DIR, filename)
-
-    print(f"[LogScope] Resolving log path: {log_path}")
-    print("-" * 60)
-
+    os.path.join discards base_dir when user_path is absolute,
+    and '../' sequences escape the intended directory.
+    """
+    full_path = os.path.join(base_dir, user_path)
     try:
-        with open(log_path, "r") as f:
-            contents = f.read()
-        print(contents)
-    except FileNotFoundError:
-        print(f"[ERROR] Log file not found: {log_path}")
-        sys.exit(1)
-    except PermissionError:
-        print(f"[ERROR] Permission denied reading: {log_path}")
-        sys.exit(1)
-
-    print("-" * 60)
-    print(f"[LogScope] Finished displaying: {filename}")
+        with open(full_path, "r") as f:
+            return f.read()
+    except Exception as e:
+        return f"Error: {e}"
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python vulnerable_app.py <log_filename>")
-        sys.exit(1)
-
-    user_input = sys.argv[1]
-    view_log(user_input)
+    if len(sys.argv) > 1:
+        base = "/var/www/html"
+        result = read_file(base, sys.argv[1])
+        print(result)
+    else:
+        print("Usage: vulnerable_app.py <path>")
     print("vulnerable_app executed")
-# Run ID: a238424f9bb8

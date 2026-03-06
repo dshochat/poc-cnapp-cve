@@ -17,16 +17,18 @@ import os
 import sys
 
 
-BASE_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+BASE_LOG_DIR = os.path.join(os.getcwd(), "logs")
 
 
-def view_log(filename):
+def view_log(requested_file):
     """Read and display the contents of the requested log file."""
-    # Construct the full path to the requested log file
-    log_path = os.path.join(BASE_LOG_DIR, filename)
+    # Construct the full path to the log file
+    # NOTE: os.path.join will discard base_dir if requested_file is absolute,
+    # and does NOT sanitize ".." segments — this is intentionally vulnerable.
+    log_path = os.path.join(BASE_LOG_DIR, requested_file)
 
     print(f"[LogScope] Base directory : {BASE_LOG_DIR}")
-    print(f"[LogScope] Requested file : {filename}")
+    print(f"[LogScope] Requested file : {requested_file}")
     print(f"[LogScope] Resolved path  : {log_path}")
     print("-" * 60)
 
@@ -38,20 +40,16 @@ def view_log(filename):
         print(f"[ERROR] Log file not found: {log_path}")
         sys.exit(1)
     except PermissionError:
-        print(f"[ERROR] Permission denied when reading: {log_path}")
+        print(f"[ERROR] Permission denied: {log_path}")
         sys.exit(1)
-
-    print("-" * 60)
-    print(f"[LogScope] Finished displaying: {filename}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python vulnerable_app.py <log_filename>")
-        print("Example: python vulnerable_app.py app.log")
         sys.exit(1)
 
     user_input = sys.argv[1]
     view_log(user_input)
     print("vulnerable_app executed")
-# Run ID: 6715f91ab700
+# Run ID: a0a72f3c0190

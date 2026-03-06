@@ -1,43 +1,44 @@
 #!/usr/bin/env python3
 """
 LogScope - Lightweight Log Viewer Utility
-Quickly inspect application log files from the configured logs directory.
-Usage: python vulnerable_app.py <log_filename>
+==========================================
+A simple CLI tool for viewing application log files stored in the
+designated logs directory. Useful for quick debugging and monitoring.
+
+Usage:
+    python vulnerable_app.py <log_filename>
+
+Example:
+    python vulnerable_app.py app.log
+    python vulnerable_app.py errors/2024-01-15.log
 """
 
 import os
 import sys
 
 
-# Base directory where application logs are stored
-LOG_DIRECTORY = os.path.join(os.getcwd(), "var", "logs")
+BASE_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
 
 def view_log_file(filename):
-    """
-    Reads and displays the contents of a log file from the log directory.
-    """
+    """Read and display the contents of a log file from the logs directory."""
     # Construct the full path to the requested log file
-    # NOTE: os.path.join will discard the base if filename is absolute,
-    # and does NOT sanitize ".." components — this is intentionally vulnerable.
-    filepath = os.path.join(LOG_DIRECTORY, filename)
+    log_path = os.path.join(BASE_LOG_DIR, filename)
 
-    print(f"[LogScope] Resolved path: {filepath}")
-    print(f"[LogScope] Reading log file: {filename}")
+    print(f"[LogScope] Resolving log path: {log_path}")
+    print(f"[LogScope] Base directory: {BASE_LOG_DIR}")
     print("-" * 60)
 
     try:
-        with open(filepath, "r") as f:
+        with open(log_path, "r") as f:
             contents = f.read()
         print(contents)
     except FileNotFoundError:
-        print(f"[ERROR] Log file not found: {filepath}")
+        print(f"[ERROR] Log file not found: {log_path}")
+        sys.exit(1)
     except PermissionError:
-        print(f"[ERROR] Permission denied: {filepath}")
-    except Exception as e:
-        print(f"[ERROR] Could not read file: {e}")
-
-    print("-" * 60)
+        print(f"[ERROR] Permission denied reading: {log_path}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -49,4 +50,4 @@ if __name__ == "__main__":
     user_input = sys.argv[1]
     view_log_file(user_input)
     print("vulnerable_app executed")
-# Run ID: 9466eb0be540
+# Run ID: 1792a098c2a6

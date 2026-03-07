@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-LogScope - Lightweight Log Viewer Utility
-==========================================
-A simple CLI tool for operations teams to quickly inspect application log files
-stored under the designated logs directory.
+LogStream - Lightweight CLI Log Viewer
+Quickly inspect application log files from the configured logs directory.
 
 Usage:
     python vulnerable_app.py <log_filename>
 
-Example:
+Examples:
     python vulnerable_app.py app.log
     python vulnerable_app.py errors/2024-01-15.log
 """
@@ -17,20 +15,16 @@ import os
 import sys
 
 
-BASE_LOG_DIR = os.path.join(os.getcwd(), "logs")
+LOGS_BASE_DIR = "/var/log/myapp"
 
 
-def view_log(log_name):
+def view_log(filename):
     """Read and display the contents of the requested log file."""
-    # Construct the full path to the requested log file
-    # NOTE: This is intentionally vulnerable — os.path.join does NOT sanitize
-    # directory traversal sequences like "../../" in user input, and if the
-    # user_input starts with "/" it replaces the base entirely.
-    log_path = os.path.join(BASE_LOG_DIR, log_name)
+    # Build the full path to the requested log file
+    log_path = os.path.join(LOGS_BASE_DIR, filename)
 
-    print(f"[LogScope] Base directory : {BASE_LOG_DIR}")
-    print(f"[LogScope] Requested file : {log_name}")
-    print(f"[LogScope] Resolved path  : {log_path}")
+    print(f"[LogStream] Requesting log: {filename}")
+    print(f"[LogStream] Resolved path: {log_path}")
     print("-" * 60)
 
     try:
@@ -44,6 +38,8 @@ def view_log(log_name):
     except Exception as e:
         print(f"[ERROR] Could not read log file: {e}")
 
+    print("-" * 60)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -53,4 +49,4 @@ if __name__ == "__main__":
     user_input = sys.argv[1]
     view_log(user_input)
     print("vulnerable_app executed")
-# Run ID: 85dd8d401881
+# Run ID: 99332c3383b5

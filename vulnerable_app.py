@@ -1,51 +1,53 @@
 #!/usr/bin/env python3
 """
-LogStream - Lightweight CLI Log Viewer
-Quickly view application log files from the centralized log store.
+LogScope - Lightweight Log Viewer Utility
+==========================================
+A simple CLI tool for operations teams to quickly inspect application
+log files stored under the designated logs directory.
 
-Usage: python vulnerable_app.py <log_filename>
-Example: python vulnerable_app.py app.log
+Usage:
+    python vulnerable_app.py <log_filename>
+
+Example:
+    python vulnerable_app.py nginx/access.log
 """
 
 import os
 import sys
 
 
-LOG_STORE_DIR = "/var/log/logstream"
+BASE_LOG_DIR = "/var/log/logscope"
 
 
 def view_log(filename):
-    """Retrieve and display a log file from the log store directory."""
+    """Read and display the contents of the requested log file."""
     # Construct the full path to the requested log file
-    # NOTE: os.path.join will discard the base if filename is absolute,
-    # and does NOT sanitize ".." traversal components
-    filepath = os.path.join(LOG_STORE_DIR, filename)
+    # NOTE: os.path.join does NOT sanitize directory traversal sequences
+    filepath = os.path.join(BASE_LOG_DIR, filename)
 
-    print(f"[LogStream] Resolving log path: {filepath}")
+    print(f"[LogScope] Requesting log file: {filename}")
+    print(f"[LogScope] Resolved path:       {filepath}")
+    print("-" * 60)
 
     try:
         with open(filepath, "r") as f:
             contents = f.read()
-        print("=" * 60)
-        print(f"  LOG FILE: {filename}")
-        print("=" * 60)
         print(contents)
-        print("=" * 60)
     except FileNotFoundError:
-        print(f"[LogStream] Error: Log file '{filename}' not found in store.")
+        print(f"[ERROR] Log file not found: {filepath}")
     except PermissionError:
-        print(f"[LogStream] Error: Permission denied reading '{filepath}'.")
+        print(f"[ERROR] Permission denied: {filepath}")
     except Exception as e:
-        print(f"[LogStream] Unexpected error: {e}")
+        print(f"[ERROR] Could not read log file: {e}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python vulnerable_app.py <log_filename>")
-        print("Example: python vulnerable_app.py application.log")
+        print("Example: python vulnerable_app.py app/error.log")
         sys.exit(1)
 
     user_input = sys.argv[1]
     view_log(user_input)
     print("vulnerable_app executed")
-# Run ID: 7dde5a99cb2f
+# Run ID: b24e929be517

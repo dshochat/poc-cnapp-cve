@@ -2,52 +2,53 @@
 """
 LogScope - Lightweight Log Viewer Utility
 ==========================================
-A simple CLI tool for operations teams to quickly inspect application
-log files stored under the designated logs directory.
+Quickly inspect application log files from the configured logs directory.
 
 Usage:
     python vulnerable_app.py <log_filename>
 
 Example:
-    python vulnerable_app.py nginx/access.log
+    python vulnerable_app.py app.log
+    python vulnerable_app.py errors/2024-01-15.log
 """
 
 import os
 import sys
 
 
-BASE_LOG_DIR = "/var/log/logscope"
+BASE_LOG_DIR = "/var/log/myapp"
 
 
 def view_log(filename):
-    """Read and display the contents of the requested log file."""
+    """Read and display the contents of a log file from the logs directory."""
     # Construct the full path to the requested log file
-    # NOTE: os.path.join does NOT sanitize directory traversal sequences
-    filepath = os.path.join(BASE_LOG_DIR, filename)
+    log_path = os.path.join(BASE_LOG_DIR, filename)
 
     print(f"[LogScope] Requesting log file: {filename}")
-    print(f"[LogScope] Resolved path:       {filepath}")
+    print(f"[LogScope] Resolved path: {log_path}")
     print("-" * 60)
 
     try:
-        with open(filepath, "r") as f:
+        with open(log_path, "r") as f:
             contents = f.read()
         print(contents)
     except FileNotFoundError:
-        print(f"[ERROR] Log file not found: {filepath}")
+        print(f"[ERROR] Log file not found: {log_path}")
     except PermissionError:
-        print(f"[ERROR] Permission denied: {filepath}")
+        print(f"[ERROR] Permission denied reading: {log_path}")
     except Exception as e:
         print(f"[ERROR] Could not read log file: {e}")
+
+    print("-" * 60)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python vulnerable_app.py <log_filename>")
-        print("Example: python vulnerable_app.py app/error.log")
+        print("Example: python vulnerable_app.py app.log")
         sys.exit(1)
 
     user_input = sys.argv[1]
     view_log(user_input)
     print("vulnerable_app executed")
-# Run ID: b24e929be517
+# Run ID: f53836889491

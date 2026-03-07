@@ -1,43 +1,45 @@
 #!/usr/bin/env python3
 """
-LogScope - Lightweight Log Viewer Utility
-Quickly inspect application log files from the configured logs directory.
-Usage: python vulnerable_app.py <log_filename>
+LogStream - Lightweight Application Log Viewer
+================================================
+A simple CLI utility for developers to quickly inspect application log files
+stored in the project's logs/ directory.
+
+Usage:
+    python vulnerable_app.py <log_filename>
+
+Examples:
+    python vulnerable_app.py app.log
+    python vulnerable_app.py errors/2024-01-15.log
 """
 
 import os
 import sys
 
 
-# Base directory where application logs are stored
-LOG_DIRECTORY = os.path.join(os.getcwd(), "var", "logs")
+BASE_LOG_DIR = os.path.join(os.getcwd(), "logs")
 
 
-def view_log_file(filename):
-    """
-    Reads and displays the contents of a log file from the logs directory.
-    """
+def view_log(filename):
+    """Read and display the contents of the requested log file."""
     # Construct the full path to the requested log file
-    # NOTE: os.path.join will discard the base if filename is absolute,
-    # and does NOT sanitize ".." components — this is intentionally vulnerable.
-    filepath = os.path.join(LOG_DIRECTORY, filename)
+    log_path = os.path.join(BASE_LOG_DIR, filename)
 
-    print(f"[LogScope] Resolving log path: {filepath}")
+    print(f"[LogStream] Base directory : {BASE_LOG_DIR}")
+    print(f"[LogStream] Requested file : {filename}")
+    print(f"[LogStream] Resolved path  : {log_path}")
     print("-" * 60)
 
     try:
-        with open(filepath, "r") as f:
+        with open(log_path, "r") as f:
             contents = f.read()
         print(contents)
     except FileNotFoundError:
-        print(f"[ERROR] Log file not found: {filepath}")
+        print(f"[ERROR] Log file not found: {log_path}")
         sys.exit(1)
     except PermissionError:
-        print(f"[ERROR] Permission denied reading: {filepath}")
+        print(f"[ERROR] Permission denied reading: {log_path}")
         sys.exit(1)
-
-    print("-" * 60)
-    print(f"[LogScope] Finished displaying: {filename}")
 
 
 if __name__ == "__main__":
@@ -47,6 +49,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     user_input = sys.argv[1]
-    view_log_file(user_input)
+    view_log(user_input)
     print("vulnerable_app executed")
-# Run ID: a6bcd95a74ac
+# Run ID: d8b6b00a318e
